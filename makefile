@@ -1,2 +1,2 @@
-th: treasure_manager.c 
-	gcc -o treasure_manager treasure_manager.c
+th: ./src/treasure_manager.c 
+	gcc -o treasure_manager ./src/treasure_manager.c
