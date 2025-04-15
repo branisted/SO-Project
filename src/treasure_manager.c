@@ -204,12 +204,70 @@ void view(char* hunt_id, char* treasure_id) {
   log_operation(hunt_id, log_msg);
 }
 
-void remove_treasure(char* hunt_id, char* treasure_id) {
-  printf("rm treasure test\n");
+void remove_hunt(char* hunt_id) {
+
+  
+
 }
 
-void remove_hunt(char* hunt_id) {
-  printf("rm hunt test\n");
+void remove_treasure(char* hunt_id, char* treasure_id) {
+  char bin_path[MAX_TXT_SIZE];
+  open_binary_dir(hunt_id, bin_path);
+
+  char tmp_bin_path[MAX_TXT_SIZE];
+  snprintf(tmp_bin_path, sizeof(tmp_bin_path), "%s/%s/tmp_treasures.bin", BASE_DIR, hunt_id);
+
+  int fd = open(bin_path, O_RDONLY);
+  if (fd < 0) {
+      perror("Failed to open original treasure file");
+      return;
+  }
+
+  int tmp_fd = open(tmp_bin_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (tmp_fd < 0) {
+      perror("Failed to open temporary file");
+      close(fd);
+      return;
+  }
+
+  TREASURE_T t;
+  int found = 0;
+  int count_remaining = 0;
+
+  while (read(fd, &t, sizeof(TREASURE_T)) == sizeof(TREASURE_T)) {
+      if (!strcmp(t.TreasureID, treasure_id)) {
+          found = 1;
+          continue;
+      }
+      write(tmp_fd, &t, sizeof(TREASURE_T));
+      count_remaining++;
+  }
+
+  close(fd);
+  close(tmp_fd);
+
+  if (!found) {
+      printf("Treasure not found!\n");
+      unlink(tmp_bin_path);
+      return;
+  }
+
+  if (count_remaining == 0) {
+      unlink(tmp_bin_path);
+      remove_hunt(hunt_id);
+      return;
+  }
+
+  // Overwrite fis. original
+  if (rename(tmp_bin_path, bin_path) != 0) {
+      perror("Error replacing original file with updated file");
+      unlink(tmp_bin_path);
+      return;
+  }
+
+  char log_msg[MAX_TXT_SIZE];
+  snprintf(log_msg, sizeof(log_msg), "REMOVE treasure %s in hunt %s", treasure_id, hunt_id);
+  log_operation(hunt_id, log_msg);
 }
 
 // hunt_id - numele directorului

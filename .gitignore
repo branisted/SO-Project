@@ -1,5 +1,6 @@
 # Compiler output
 *.out
+treasure_manager
 
 # Core dumps
 core
@@ -21,6 +22,5 @@ test-results/
 .cache/
 
 # 🚧 Project-specific
-treasure_manager
 hunts/
 logged_hunt-*
