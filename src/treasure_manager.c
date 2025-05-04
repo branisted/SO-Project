@@ -70,7 +70,15 @@ void log_operation(const char* hunt_id, const char* message) {
       return;
   }
 
-  dprintf(fd, "%s\n", message);
+  time_t rawtime;
+  struct tm* timeinfo;
+  char time_str[64];
+
+  time(&rawtime);
+  timeinfo = localtime(&rawtime);
+  strftime(time_str, sizeof(time_str), "[%Y-%m-%d %H:%M:%S]", timeinfo);
+
+  dprintf(fd, "%s %s\n", time_str, message);
   close(fd);
 }
 
@@ -205,9 +213,39 @@ void view(char* hunt_id, char* treasure_id) {
 }
 
 void remove_hunt(char* hunt_id) {
+  char hunt_path[MAX_TXT_SIZE];
+  snprintf(hunt_path, sizeof(hunt_path), "%s/%s", BASE_DIR, hunt_id);
 
-  
+  DIR* dir = opendir(hunt_path);
+  if (!dir) {
+      perror("Failed to open hunt directory");
+      return;
+  }
 
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+
+    if (!strcmp(entry->d_name, "logged_hunt")) continue;
+
+    char file_path[MAX_TXT_SIZE];
+    snprintf(file_path, sizeof(file_path), "%s/%s", hunt_path, entry->d_name);
+
+    if (unlink(file_path) != 0) {
+        perror("Failed to remove a file inside the hunt directory");
+    }
+  }
+  closedir(dir);
+
+  char linkname[MAX_TXT_SIZE];
+  snprintf(linkname, sizeof(linkname), "logged_hunt-%s", hunt_id);
+  unlink(linkname);
+
+  char log_msg[MAX_TXT_SIZE];
+  snprintf(log_msg, sizeof(log_msg), "REMOVE hunt %s (except log file)", hunt_id);
+  log_operation(hunt_id, log_msg);
+
+  printf("Hunt '%s' has been removed (log file preserved).\n", hunt_id);
 }
 
 void remove_treasure(char* hunt_id, char* treasure_id) {
