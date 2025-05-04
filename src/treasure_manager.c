@@ -141,32 +141,39 @@ void add(char* hunt_id) {
 }
 
 void list(char* hunt_id) {
-
   char bin_path[MAX_TXT_SIZE];
   open_binary_dir(hunt_id, bin_path);
 
   int fd = open(bin_path, O_RDONLY);
-    
   if (fd < 0) {
-    perror("open list");
+    fprintf(stderr, "Error: Treasure file for hunt '%s' does not exist or cannot be opened.\n", hunt_id);
+    perror("open");
+    log_operation(hunt_id, "LIST treasures failed - file not found");
     return;
   }
 
-  printf("Hunt name: %s\nTotal file size: %d\nLast modification time: not yet implemented\n", hunt_id, fd);
+  struct stat st;
+  if (fstat(fd, &st) < 0) {
+    perror("fstat");
+    close(fd);
+    return;
+  }
+
+  char mod_time[64];
+  strftime(mod_time, sizeof(mod_time), "%Y-%m-%d %H:%M:%S", localtime(&st.st_mtime));
+
+  printf("Hunt name: %s\nTotal file size: %ld bytes\nLast modification time: %s\n", hunt_id, st.st_size, mod_time);
 
   TREASURE_T t;
-
   int i = 0;
 
   while (read(fd, &t, sizeof(TREASURE_T)) == sizeof(TREASURE_T)) {
-
     printf("\nTreasure %d:\n", ++i);
     printf("Treasure ID: %s\n", t.TreasureID);
     printf("User name: %s\n", t.Username);
     printf("GPS coordinates (x y): %lf %lf\n", t.GPScoords.x, t.GPScoords.y);
     printf("Clue text: %s\n", t.Clue);
     printf("Value: %d\n", t.Value);
-
   }
 
   close(fd);
@@ -218,34 +225,32 @@ void remove_hunt(char* hunt_id) {
 
   DIR* dir = opendir(hunt_path);
   if (!dir) {
-      perror("Failed to open hunt directory");
-      return;
+    perror("Failed to open hunt directory");
+    return;
   }
 
   struct dirent* entry;
   while ((entry = readdir(dir)) != NULL) {
     if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
 
-    if (!strcmp(entry->d_name, "logged_hunt")) continue;
-
     char file_path[MAX_TXT_SIZE];
     snprintf(file_path, sizeof(file_path), "%s/%s", hunt_path, entry->d_name);
 
     if (unlink(file_path) != 0) {
-        perror("Failed to remove a file inside the hunt directory");
+      perror("Failed to remove a file inside the hunt directory");
     }
   }
   closedir(dir);
+
+  if (rmdir(hunt_path) != 0) {
+    perror("Failed to remove the hunt directory");
+  }
 
   char linkname[MAX_TXT_SIZE];
   snprintf(linkname, sizeof(linkname), "logged_hunt-%s", hunt_id);
   unlink(linkname);
 
-  char log_msg[MAX_TXT_SIZE];
-  snprintf(log_msg, sizeof(log_msg), "REMOVE hunt %s (except log file)", hunt_id);
-  log_operation(hunt_id, log_msg);
-
-  printf("Hunt '%s' has been removed (log file preserved).\n", hunt_id);
+  printf("Hunt '%s' has been completely removed.\n", hunt_id);
 }
 
 void remove_treasure(char* hunt_id, char* treasure_id) {
