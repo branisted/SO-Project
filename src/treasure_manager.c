@@ -291,6 +291,9 @@ void remove_treasure(char* hunt_id, char* treasure_id) {
 
   if (!found) {
       printf("Treasure not found!\n");
+      char log_msg[MAX_TXT_SIZE];
+      snprintf(log_msg, sizeof(log_msg), "REMOVE treasure %s in hunt %s - Treasure not found!", treasure_id, hunt_id);
+      log_operation(hunt_id, log_msg);
       unlink(tmp_bin_path);
       return;
   }

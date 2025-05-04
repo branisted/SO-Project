@@ -1,26 +1,19 @@
-# Compiler output
 *.out
-treasure_manager
 
-# Core dumps
 core
 *.core
 
-# OS metadata
 .DS_Store
 Thumbs.db
 
-# 🧠 IDE/editor settings
 .vscode/
 .idea/
 *.swp
 *.swo
 *.bak
 
-# 🧪 Unit test results or cache
 test-results/
 .cache/
 
-# 🚧 Project-specific
 hunts/
 logged_hunt-*
