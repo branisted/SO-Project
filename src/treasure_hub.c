@@ -7,6 +7,39 @@
 
 #define MAX_TXT_SIZE 256
 
+void write_command(const char *command) {
+    FILE *fp = fopen("command.txt", "w");
+    if (!fp) {
+        perror("Failed to write to command.txt");
+        return;
+    }
+    fprintf(fp, "%s\n", command);
+    fclose(fp);
+}
+
+void read_result() {
+    FILE *fp = fopen("result.txt", "r");
+    if (!fp) {
+        perror("Failed to read result.txt");
+        return;
+    }
+
+    char line[MAX_TXT_SIZE];
+    while (fgets(line, sizeof(line), fp)) {
+        printf("%s", line);
+    }
+    fclose(fp);
+}
+
+
+int check_monitor_running(int monitor_running) {
+    if (!monitor_running) {
+        printf("Start the monitor first using start_monitor.\n");
+        return 0;
+    }
+    return 1;
+}
+
 void handle_command_signal(int sig) {
     FILE *cmd_fp = fopen("command.txt", "r");
     if (!cmd_fp) {
@@ -77,10 +110,8 @@ void start_monitor(pid_t* monitor_pid, int* monitor_running) {
 }
 
 void stop_monitor(pid_t* monitor_pid, int* monitor_running) {
-    if (!(*monitor_running)) {
-        printf("Monitor is not running.\n");
+    if (!check_monitor_running(*monitor_running))
         return;
-    }
 
     kill(*monitor_pid, SIGUSR2);
     waitpid(*monitor_pid, NULL, 0);
@@ -90,16 +121,38 @@ void stop_monitor(pid_t* monitor_pid, int* monitor_running) {
     *monitor_pid = -1;
 }
 
-void list_hunts() {
-    printf("List hunts test.\n");
+void list_hunts(pid_t* monitor_pid, int* monitor_running) {
+    if (!check_monitor_running(*monitor_running))
+        return;
+
+    write_command("list_hunts");
+    kill(*monitor_pid, SIGUSR1);
+    sleep(1);
+    read_result();
 }
 
-void list_treasures(char *game_name) {
-    printf("List treasures test for game: %s\n", game_name);
+void list_treasures(pid_t* monitor_pid, int* monitor_running, char *game_name) {
+    if (!check_monitor_running(*monitor_running))
+        return;
+
+    char command[MAX_TXT_SIZE];
+    snprintf(command, sizeof(command), "list_treasures %s", game_name);
+    write_command(command);
+    kill(*monitor_pid, SIGUSR1);
+    sleep(1);
+    read_result();
 }
 
-void view_treasure(char *game, char *treasure) {
-    printf("View treasure test for game: %s, treasure: %s\n", game, treasure);
+void view_treasure(pid_t* monitor_pid, int* monitor_running, char *game, char *treasure) {
+    if (!check_monitor_running(*monitor_running))
+        return;
+
+    char command[MAX_TXT_SIZE];
+    snprintf(command, sizeof(command), "view_treasure %s %s", game, treasure);
+    write_command(command);
+    kill(*monitor_pid, SIGUSR1);
+    sleep(1);
+    read_result();
 }
 
 int main() {
@@ -126,17 +179,17 @@ int main() {
             stop_monitor(&monitor_pid, &monitor_running);
 
         } else if (strcmp(input, "list_hunts") == 0) {
-            list_hunts();
+            list_hunts(&monitor_pid, &monitor_running);
 
         } else if (strncmp(input, "list_treasures ", 15) == 0) {
             char game_name[MAX_TXT_SIZE];
             sscanf(input + 15, "%63s", game_name);
-            list_treasures(game_name);
+            list_treasures(&monitor_pid, &monitor_running, game_name);
 
         } else if (strncmp(input, "view_treasure ", 14) == 0) {
             char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
             sscanf(input + 14, "%s %s", game, treasure);
-            view_treasure(game, treasure);
+            view_treasure(&monitor_pid, &monitor_running, game, treasure);
 
         } else if (strcmp(input, "exit") == 0) {
             if (monitor_running) {

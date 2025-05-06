@@ -18,3 +18,5 @@ hunts/
 logged_hunt-*
 
 tmp.c
+command.txt
+result.txt
