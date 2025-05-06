@@ -1,13 +1,93 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/wait.h>
 
-void start_monitor() {
-    printf("Monitor start test.\n");
+#define MAX_TXT_SIZE 256
+
+void handle_command_signal(int sig) {
+    FILE *cmd_fp = fopen("command.txt", "r");
+    if (!cmd_fp) {
+        perror("Monitor: Failed to read command.txt");
+        return;
+    }
+
+    char command[MAX_TXT_SIZE];
+    fgets(command, sizeof(command), cmd_fp);
+    fclose(cmd_fp);
+
+    command[strcspn(command, "\n")] = '\0';
+
+    char system_cmd[MAX_TXT_SIZE];
+
+    if (strncmp(command, "list_hunts", 10) == 0) {
+        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list-hunts > result.txt");
+
+    } else if (strncmp(command, "list_treasures", 14) == 0) {
+        char game[MAX_TXT_SIZE];
+        sscanf(command, "list_treasures %s", game);
+        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list %s > result.txt", game);
+
+    } else if (strncmp(command, "view_treasure", 13) == 0) {
+        char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
+        sscanf(command, "view_treasure %s %s", game, treasure);
+        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --view %s %s > result.txt", game, treasure);
+
+    } else {
+        snprintf(system_cmd, sizeof(system_cmd), "echo Invalid command > result.txt");
+    }
+
+    system(system_cmd);
 }
 
-void stop_monitor() {
-    printf("Monitor stop test.\n");
+void handle_terminate_signal(int sig) {
+    printf("\n[Monitor] Received termination signal. Exiting...\n");
+    exit(0);
+}
+
+void start_monitor(pid_t* monitor_pid, int* monitor_running) {
+    if (*monitor_running) {
+        printf("Monitor already running.\n");
+        return;
+    }
+
+    *monitor_pid = fork();
+
+    if (*monitor_pid == 0) {
+        signal(SIGUSR1, handle_command_signal);
+        signal(SIGUSR2, handle_terminate_signal);
+
+        printf("[Monitor] Running. PID: %d\n", getpid());
+        fflush(stdout);
+
+        while (1) {
+            pause();
+        }
+
+        exit(0);
+    } else if (*monitor_pid > 0) {
+        *monitor_running = 1;
+        printf("\nMonitor started (PID %d)\n", *monitor_pid);
+        fflush(stdout);
+    } else {
+        perror("fork failed");
+    }
+}
+
+void stop_monitor(pid_t* monitor_pid, int* monitor_running) {
+    if (!(*monitor_running)) {
+        printf("Monitor is not running.\n");
+        return;
+    }
+
+    kill(*monitor_pid, SIGUSR2);
+    waitpid(*monitor_pid, NULL, 0);
+    printf("Monitor stopped.\n");
+
+    *monitor_running = 0;
+    *monitor_pid = -1;
 }
 
 void list_hunts() {
@@ -25,6 +105,9 @@ void view_treasure(char *game, char *treasure) {
 int main() {
     char input[128];
 
+    pid_t monitor_pid = -1;
+    int monitor_running = 0;
+
     printf("Treasure Hub:\n");
 
     while (1) {
@@ -37,26 +120,26 @@ int main() {
         input[strcspn(input, "\n")] = '\0'; // stergere caracterul \n de la urma stringului de input
 
         if (strcmp(input, "start_monitor") == 0) {
-            start_monitor();
-
+            start_monitor(&monitor_pid, &monitor_running);
+            usleep(100000); // ca sa evit cazul in care ">" se printeaza mai repede decat printul din procesul copil
         } else if (strcmp(input, "stop_monitor") == 0) {
-            stop_monitor();
+            stop_monitor(&monitor_pid, &monitor_running);
 
         } else if (strcmp(input, "list_hunts") == 0) {
             list_hunts();
 
         } else if (strncmp(input, "list_treasures ", 15) == 0) {
-            char game_name[64];
+            char game_name[MAX_TXT_SIZE];
             sscanf(input + 15, "%63s", game_name);
             list_treasures(game_name);
 
         } else if (strncmp(input, "view_treasure ", 14) == 0) {
-            char game[64], treasure[64];
-            sscanf(input + 14, "%63s %63s", game, treasure);
+            char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
+            sscanf(input + 14, "%s %s", game, treasure);
             view_treasure(game, treasure);
 
         } else if (strcmp(input, "exit") == 0) {
-            if (1 == 0) { // trebuie adaugata integrarea cu start_monitor
+            if (monitor_running) {
                 printf("Please stop the monitor before exiting.\n");
             } else {
                 remove("command.txt");
