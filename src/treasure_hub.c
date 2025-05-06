@@ -7,6 +7,8 @@
 
 #define MAX_TXT_SIZE 256
 
+int shutting_down = 0; // flag pentru testarea introducerii comenzilor in monitor dupa ce a primit semnalul de terminare 
+
 void write_command(const char *command) {
     FILE *fp = fopen("command.txt", "w");
     if (!fp) {
@@ -33,6 +35,12 @@ void read_result() {
 
 
 int check_monitor_running(int monitor_running) {
+    if (shutting_down) {
+        printf("Monitor is shutting down. Please wait...\n");
+     
+        return 0;
+    }
+
     if (!monitor_running) {
         printf("Start the monitor first using start_monitor.\n");
         return 0;
@@ -56,7 +64,7 @@ void handle_command_signal(int sig) {
     char system_cmd[MAX_TXT_SIZE];
 
     if (strncmp(command, "list_hunts", 10) == 0) {
-        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list-hunts > result.txt");
+        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list_hunts > result.txt");
 
     } else if (strncmp(command, "list_treasures", 14) == 0) {
         char game[MAX_TXT_SIZE];
@@ -112,6 +120,8 @@ void start_monitor(pid_t* monitor_pid, int* monitor_running) {
 void stop_monitor(pid_t* monitor_pid, int* monitor_running) {
     if (!check_monitor_running(*monitor_running))
         return;
+
+    shutting_down = 1;
 
     kill(*monitor_pid, SIGUSR2);
     waitpid(*monitor_pid, NULL, 0);

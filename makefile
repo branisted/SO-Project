@@ -1,5 +1,15 @@
-tmgr: ./src/treasure_manager.c 
-	gcc -o treasure_manager ./src/treasure_manager.c
+CC = gcc
+CFLAGS = -Wall -Wextra -g
+SRC_DIR = ./src
 
-thub: ./src/treasure_hub.c 
-	gcc -o treasure_hub ./src/treasure_hub.c
+TMGR_OBJS = $(SRC_DIR)/treasure_manager.c $(SRC_DIR)/treasure_mgr_lib.c
+THUB_OBJS = $(SRC_DIR)/treasure_hub.c
+
+tmgr: $(TMGR_OBJS)
+	$(CC) $(CFLAGS) -o treasure_manager $(TMGR_OBJS)
+
+thub: $(THUB_OBJS)
+	$(CC) $(CFLAGS) -o treasure_hub $(THUB_OBJS)
+
+clean:
+	rm -f treasure_manager treasure_hub
