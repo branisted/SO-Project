@@ -12,8 +12,9 @@ Thumbs.db
 *.swo
 *.bak
 
-test-results/
 .cache/
 
 hunts/
 logged_hunt-*
+
+tmp.c
