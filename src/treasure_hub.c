@@ -1,175 +1,158 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <signal.h>
+#include <unistd.h>
 #include <sys/wait.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define MAX_TXT_SIZE 256
+#define TMP_FOLDER "tmp"
+#define CMD_FILE_PATH "tmp/command.txt"
 
-int shutting_down = 0; // flag pentru testarea introducerii comenzilor in monitor dupa ce a primit semnalul de terminare 
+pid_t monitor_pid = -1;
+int monitor_shutting_down = 0;
 
-void write_command(const char *command) {
-    FILE *fp = fopen("command.txt", "w");
-    if (!fp) {
-        perror("Failed to write to command.txt");
-        return;
+void setup_tmp_folder() {
+    struct stat st;
+
+    if (stat(TMP_FOLDER, &st) == 0 && S_ISDIR(st.st_mode)) {
+        DIR *dir = opendir(TMP_FOLDER);
+        struct dirent *entry;
+        char path[MAX_TXT_SIZE];
+
+        if (dir) {
+            while ((entry = readdir(dir)) != NULL) {
+                if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                    continue;
+
+                snprintf(path, sizeof(path), "%s/%s", TMP_FOLDER, entry->d_name);
+                remove(path);
+            }
+            closedir(dir);
+        }
+
+        rmdir(TMP_FOLDER);
     }
-    fprintf(fp, "%s\n", command);
-    fclose(fp);
+
+    mkdir(TMP_FOLDER, 0777);
 }
 
-void read_result() {
-    FILE *fp = fopen("result.txt", "r");
-    if (!fp) {
-        perror("Failed to read result.txt");
-        return;
+int start_monitor() {
+    monitor_pid = fork();
+
+    if (monitor_pid == 0) {
+        execl("./monitor", "monitor", NULL);
+        perror("execl failed");
+        exit(1);
+    } else if (monitor_pid > 0) {
+        printf("\nMonitor started (PID %d)\n", monitor_pid);
+        fflush(stdout);
+    } else {
+        perror("Fork failed.");
+        exit(1);
     }
 
-    char line[MAX_TXT_SIZE];
-    while (fgets(line, sizeof(line), fp)) {
-        printf("%s", line);
-    }
-    fclose(fp);
-}
-
-
-int check_monitor_running(int monitor_running) {
-    if (shutting_down) {
-        printf("Monitor is shutting down. Please wait...\n");
-     
-        return 0;
-    }
-
-    if (!monitor_running) {
-        printf("Start the monitor first using start_monitor.\n");
-        return 0;
-    }
     return 1;
 }
 
-void handle_command_signal(int sig) {
-    FILE *cmd_fp = fopen("command.txt", "r");
-    if (!cmd_fp) {
-        perror("Monitor: Failed to read command.txt");
-        return;
+int stop_monitor() {
+
+    if (monitor_shutting_down) {
+        printf("Monitor is already shutting down.\n");
+        return 0;
     }
 
-    char command[MAX_TXT_SIZE];
-    fgets(command, sizeof(command), cmd_fp);
-    fclose(cmd_fp);
-
-    command[strcspn(command, "\n")] = '\0';
-
-    char system_cmd[MAX_TXT_SIZE];
-
-    if (strncmp(command, "list_hunts", 10) == 0) {
-        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list_hunts > result.txt");
-
-    } else if (strncmp(command, "list_treasures", 14) == 0) {
-        char game[MAX_TXT_SIZE];
-        sscanf(command, "list_treasures %s", game);
-        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --list %s > result.txt", game);
-
-    } else if (strncmp(command, "view_treasure", 13) == 0) {
-        char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
-        sscanf(command, "view_treasure %s %s", game, treasure);
-        snprintf(system_cmd, sizeof(system_cmd), "./treasure_manager --view %s %s > result.txt", game, treasure);
-
-    } else {
-        snprintf(system_cmd, sizeof(system_cmd), "echo Invalid command > result.txt");
+    if (kill(monitor_pid, SIGUSR2) < 0) {
+        perror("Error sending SIGUSR2 to monitor");
+        return 0;
     }
 
-    system(system_cmd);
+    monitor_shutting_down = 1;
+    printf("Stop signal sent to monitor (PID %d). Waiting for it to exit...\n", monitor_pid);
+    return 1;
 }
 
-void handle_terminate_signal(int sig) {
-    printf("\n[Monitor] Received termination signal. Exiting...\n");
-    exit(0);
-}
+int list_hunts() {
 
-void start_monitor(pid_t* monitor_pid, int* monitor_running) {
-    if (*monitor_running) {
-        printf("Monitor already running.\n");
-        return;
+    if (monitor_pid <= 0) {
+        printf("Monitor is not running.\n");
+        return 0;
     }
 
-    *monitor_pid = fork();
-
-    if (*monitor_pid == 0) {
-        signal(SIGUSR1, handle_command_signal);
-        signal(SIGUSR2, handle_terminate_signal);
-
-        printf("[Monitor] Running. PID: %d\n", getpid());
-        fflush(stdout);
-
-        while (1) {
-            pause();
-        }
-
-        exit(0);
-    } else if (*monitor_pid > 0) {
-        *monitor_running = 1;
-        printf("\nMonitor started (PID %d)\n", *monitor_pid);
-        fflush(stdout);
-    } else {
-        perror("fork failed");
+    FILE *cmd_file = fopen(CMD_FILE_PATH, "w");
+    if (!cmd_file) {
+        perror("Failed to write command");
+        return 0;
     }
+
+    fprintf(cmd_file, "list_hunts");
+    fclose(cmd_file);
+
+    kill(monitor_pid, SIGUSR1);
+    return 1;
 }
 
-void stop_monitor(pid_t* monitor_pid, int* monitor_running) {
-    if (!check_monitor_running(*monitor_running))
-        return;
+int list_treasures(char* game_name) {
+    if (monitor_pid <= 0) {
+        printf("Monitor is not running.\n");
+        return 0;
+    }
 
-    shutting_down = 1;
+    FILE *cmd_file = fopen(CMD_FILE_PATH, "w");
+    if (!cmd_file) {
+        perror("Failed to write command");
+        return 0;
+    }
 
-    kill(*monitor_pid, SIGUSR2);
-    waitpid(*monitor_pid, NULL, 0);
-    printf("Monitor stopped.\n");
+    fprintf(cmd_file, "list_treasures %s", game_name);
+    fclose(cmd_file);
 
-    *monitor_running = 0;
-    *monitor_pid = -1;
+    kill(monitor_pid, SIGUSR1);
+    return 1;
 }
 
-void list_hunts(pid_t* monitor_pid, int* monitor_running) {
-    if (!check_monitor_running(*monitor_running))
-        return;
+int view_treasure(char* game, char* treasure) {
+    if (monitor_pid <= 0) {
+        printf("Monitor is not running.\n");
+        return 0;
+    }
 
-    write_command("list_hunts");
-    kill(*monitor_pid, SIGUSR1);
-    sleep(1);
-    read_result();
+    FILE *cmd_file = fopen(CMD_FILE_PATH, "w");
+    if (!cmd_file) {
+        perror("Failed to write command");
+        return 0;
+    }
+
+    fprintf(cmd_file, "view_treasure %s %s", game, treasure);
+    fclose(cmd_file);
+
+    kill(monitor_pid, SIGUSR1);
+    return 1;
 }
 
-void list_treasures(pid_t* monitor_pid, int* monitor_running, char *game_name) {
-    if (!check_monitor_running(*monitor_running))
-        return;
-
-    char command[MAX_TXT_SIZE];
-    snprintf(command, sizeof(command), "list_treasures %s", game_name);
-    write_command(command);
-    kill(*monitor_pid, SIGUSR1);
-    sleep(1);
-    read_result();
-}
-
-void view_treasure(pid_t* monitor_pid, int* monitor_running, char *game, char *treasure) {
-    if (!check_monitor_running(*monitor_running))
-        return;
-
-    char command[MAX_TXT_SIZE];
-    snprintf(command, sizeof(command), "view_treasure %s %s", game, treasure);
-    write_command(command);
-    kill(*monitor_pid, SIGUSR1);
-    sleep(1);
-    read_result();
+void handle_sigchld(int sig) {
+    int status;
+    pid_t pid = waitpid(-1, &status, WNOHANG);
+    if (pid == monitor_pid) {
+        printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", pid, WEXITSTATUS(status));
+        monitor_pid = -1;
+        monitor_shutting_down = 0;
+    }
 }
 
 int main() {
     char input[128];
 
-    pid_t monitor_pid = -1;
-    int monitor_running = 0;
+    setup_tmp_folder();
+
+    struct sigaction sa_chld;
+    memset(&sa_chld, 0, sizeof(sa_chld));
+    sa_chld.sa_handler = handle_sigchld;
+    sigaction(SIGCHLD, &sa_chld, NULL);
+
 
     printf("Treasure Hub:\n");
 
@@ -180,38 +163,62 @@ int main() {
         if (!fgets(input, sizeof(input), stdin))
             break;
 
-        input[strcspn(input, "\n")] = '\0'; // stergere caracterul \n de la urma stringului de input
+        input[strcspn(input, "\n")] = '\0';
 
         if (strcmp(input, "start_monitor") == 0) {
-            start_monitor(&monitor_pid, &monitor_running);
-            usleep(100000); // ca sa evit cazul in care ">" se printeaza mai repede decat printul din procesul copil
-        } else if (strcmp(input, "stop_monitor") == 0) {
-            stop_monitor(&monitor_pid, &monitor_running);
 
-        } else if (strcmp(input, "list_hunts") == 0) {
-            list_hunts(&monitor_pid, &monitor_running);
-
-        } else if (strncmp(input, "list_treasures ", 15) == 0) {
-            char game_name[MAX_TXT_SIZE];
-            sscanf(input + 15, "%63s", game_name);
-            list_treasures(&monitor_pid, &monitor_running, game_name);
-
-        } else if (strncmp(input, "view_treasure ", 14) == 0) {
-            char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
-            sscanf(input + 14, "%s %s", game, treasure);
-            view_treasure(&monitor_pid, &monitor_running, game, treasure);
-
-        } else if (strcmp(input, "exit") == 0) {
-            if (monitor_running) {
-                printf("Please stop the monitor before exiting.\n");
-            } else {
-                remove("command.txt");
-                remove("result.txt");
-                break;
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
             }
 
+            start_monitor();
+
+        } else if (strcmp(input, "stop_monitor") == 0) {
+
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
+            }
+
+            stop_monitor();
+
+        } else if (strcmp(input, "list_hunts") == 0) {
+
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
+            }
+
+            list_hunts();
+
+        } else if (strncmp(input, "list_treasures ", 15) == 0) {
+
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
+            }
+
+            char game_name[MAX_TXT_SIZE];
+            sscanf(input + 15, "%63s", game_name);
+            list_treasures(game_name);
+
+        } else if (strncmp(input, "view_treasure ", 14) == 0) {
+
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
+            }
+
+            char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
+            sscanf(input + 14, "%s %s", game, treasure);
+            view_treasure(game, treasure);
+
+        } else if (strcmp(input, "exit") == 0) {
+            break;
+
         } else {
-            printf("Unknown command: %s\n", input);
+            printf("Unknown command: %s", input);
         }
     }
 
