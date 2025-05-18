@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -8,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <pthread.h>
 
 #define MAX_TXT_SIZE 256
 #define TMP_FOLDER "tmp"
@@ -15,6 +15,8 @@
 
 pid_t monitor_pid = -1;
 int monitor_shutting_down = 0;
+int pipe_fds[2] = { -1, -1 };  // [0] read, [1] write
+pthread_t reader_thread;
 
 void setup_tmp_folder() {
     struct stat st;
@@ -41,14 +43,42 @@ void setup_tmp_folder() {
     mkdir(TMP_FOLDER, 0777);
 }
 
+// Citire din pipe si print la stdout
+void* reader_routine(void *arg) {
+    char buf[512];
+    ssize_t n;
+    while ((n = read(pipe_fds[0], buf, sizeof(buf)-1)) > 0) {
+        buf[n] = '\0';
+        printf("%s", buf);
+        fflush(stdout);
+    }
+    return NULL;
+}
+
 int start_monitor() {
+    if (pipe(pipe_fds) < 0) {
+        perror("pipe"); exit(1);
+    }
+
     monitor_pid = fork();
 
     if (monitor_pid == 0) {
+        // Monitor
+        close(pipe_fds[0]); // Inchide capatul de citire
+        dup2(pipe_fds[1], STDOUT_FILENO); // Redirectare stdout spre pipe
+        dup2(pipe_fds[1], STDERR_FILENO); // Redirectare stderr spre pipe
+        close(pipe_fds[1]);
         execl("./monitor", "monitor", NULL);
         perror("execl failed");
         exit(1);
     } else if (monitor_pid > 0) {
+        // Hub
+        close(pipe_fds[1]); // Inchide capatul de scriere
+        // Citire
+        if (pthread_create(&reader_thread, NULL, reader_routine, NULL) != 0) {
+            perror("pthread_create");
+            exit(1);
+        }
         printf("\nMonitor started (PID %d)\n", monitor_pid);
         fflush(stdout);
     } else {
@@ -70,16 +100,15 @@ void stop_monitor() {
     monitor_shutting_down = 1;
 
     int status;
-    pid_t result = waitpid(monitor_pid, &status, 0);
-    if (result == monitor_pid) {
-        printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", monitor_pid, WEXITSTATUS(status));
-        monitor_pid = -1;
-        monitor_shutting_down = 0;
-    } else {
-        perror("[Treasure Hub] Failed to wait for monitor");
-    }
-}
+    waitpid(monitor_pid, &status, 0);
+    // Inchide capatul de citire
+    close(pipe_fds[0]);
+    pthread_join(reader_thread, NULL);
 
+    printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", monitor_pid, WEXITSTATUS(status));
+    monitor_pid = -1;
+    monitor_shutting_down = 0;
+}
 
 int list_hunts() {
 
