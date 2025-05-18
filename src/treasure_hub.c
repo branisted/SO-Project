@@ -168,6 +168,25 @@ int view_treasure(char* game, char* treasure) {
     return 1;
 }
 
+int calculate_score() {
+    if (monitor_pid <= 0) {
+        printf("Monitor is not running.\n");
+        return 0;
+    }
+
+    FILE *cmd_file = fopen(CMD_FILE_PATH, "w");
+    if (!cmd_file) {
+        perror("Failed to write command");
+        return 0;
+    }
+
+    fprintf(cmd_file, "calculate_score");
+    fclose(cmd_file);
+
+    kill(monitor_pid, SIGUSR1);
+    return 1;
+}
+
 void handle_sigchld(int sig) {
     int status;
     pid_t pid;
@@ -261,6 +280,15 @@ int main() {
             sscanf(input + 14, "%s %s", game, treasure);
             view_treasure(game, treasure);
 
+        } else if (strcmp(input, "calculate_score") == 0) {
+
+            if (monitor_shutting_down) {
+                printf("Monitor is shutting down. Please wait...\n");
+                continue;
+            }
+
+            calculate_score();
+            
         } else if (strcmp(input, "exit") == 0) {
             break;
 

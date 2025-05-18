@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <dirent.h>
+#include "treasure_mgr_lib.h"
 
 #define MAX_TXT_SIZE 256
 #define CMD_FILE_PATH "tmp/command.txt"
@@ -12,7 +14,6 @@
 void handle_terminate_signal(int sig) {
     printf("\n[Monitor] Received termination signal. Exiting...\n");
     fflush(stdout);
-    usleep(5000);
     exit(0);
 }
 
@@ -55,6 +56,12 @@ void handle_command_input(int sig) {
                 perror("execlp failed");
                 exit(1);
 
+            } else if (strcmp(cmd, "calculate_score") == 0) {
+
+                execlp("./calculate_score", "calculate_score", NULL);
+                perror("execlp failed");
+                exit(1);
+                        
             } else {
 
                 printf("[Monitor] Unknown command: %s\n", cmd);
