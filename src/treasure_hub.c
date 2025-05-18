@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -58,22 +59,27 @@ int start_monitor() {
     return 1;
 }
 
-int stop_monitor() {
-
-    if (monitor_shutting_down) {
-        printf("Monitor is already shutting down.\n");
-        return 0;
+void stop_monitor() {
+    if (monitor_pid <= 0) {
+        printf("[Treasure Hub] No monitor is running.\n");
+        return;
     }
 
-    if (kill(monitor_pid, SIGUSR2) < 0) {
-        perror("Error sending SIGUSR2 to monitor");
-        return 0;
-    }
-
+    printf("[Treasure Hub] Stopping monitor (PID %d)...\n", monitor_pid);
+    kill(monitor_pid, SIGUSR2);
     monitor_shutting_down = 1;
-    printf("Stop signal sent to monitor (PID %d). Waiting for it to exit...\n", monitor_pid);
-    return 1;
+
+    int status;
+    pid_t result = waitpid(monitor_pid, &status, 0);
+    if (result == monitor_pid) {
+        printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", monitor_pid, WEXITSTATUS(status));
+        monitor_pid = -1;
+        monitor_shutting_down = 0;
+    } else {
+        perror("[Treasure Hub] Failed to wait for monitor");
+    }
 }
+
 
 int list_hunts() {
 
@@ -135,11 +141,27 @@ int view_treasure(char* game, char* treasure) {
 
 void handle_sigchld(int sig) {
     int status;
-    pid_t pid = waitpid(-1, &status, WNOHANG);
-    if (pid == monitor_pid) {
-        printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", pid, WEXITSTATUS(status));
-        monitor_pid = -1;
-        monitor_shutting_down = 0;
+    pid_t pid;
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (pid == monitor_pid) {
+            printf("[Treasure Hub] Monitor (PID %d) exited with code %d.\n", pid, WEXITSTATUS(status));
+            monitor_pid = -1;
+            monitor_shutting_down = 0;
+        } else {
+            printf("[Treasure Hub] Child process (PID %d) exited.\n", pid);
+        }
+    }
+}
+
+void setup_sigchld_handler() {
+    struct sigaction sa_chld;
+    sa_chld.sa_handler = handle_sigchld;
+    sigemptyset(&sa_chld.sa_mask);
+    sa_chld.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGCHLD, &sa_chld, NULL) == -1) {
+        perror("sigaction SIGCHLD");
     }
 }
 
@@ -148,11 +170,7 @@ int main() {
 
     setup_tmp_folder();
 
-    struct sigaction sa_chld;
-    memset(&sa_chld, 0, sizeof(sa_chld));
-    sa_chld.sa_handler = handle_sigchld;
-    sigaction(SIGCHLD, &sa_chld, NULL);
-
+    setup_sigchld_handler();
 
     printf("Treasure Hub:\n");
 

@@ -17,6 +17,7 @@ Thumbs.db
 hunts/
 logged_hunt-*
 
+tmp.c
 tmp
 command.txt
 result.txt
