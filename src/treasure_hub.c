@@ -43,6 +43,23 @@ void setup_tmp_folder() {
     mkdir(TMP_FOLDER, 0777);
 }
 
+void cleanup_tmp_folder() {
+    DIR *dir = opendir(TMP_FOLDER);
+    if (dir) {
+        struct dirent *entry;
+        char path[MAX_TXT_SIZE];
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+            snprintf(path, sizeof(path), "%s/%s", TMP_FOLDER, entry->d_name);
+            remove(path);
+        }
+        closedir(dir);
+        rmdir(TMP_FOLDER);
+    }
+}
+
+
 // Citire din pipe si print la stdout
 void* reader_routine(void *arg) {
     char buf[512];
@@ -79,7 +96,7 @@ int start_monitor() {
             perror("pthread_create");
             exit(1);
         }
-        printf("\nMonitor started (PID %d)\n", monitor_pid);
+        printf("\n[Treasure Hub] Monitor started (PID %d)\n", monitor_pid);
         fflush(stdout);
     } else {
         perror("Fork failed.");
@@ -95,7 +112,7 @@ void stop_monitor() {
         return;
     }
 
-    printf("[Treasure Hub] Stopping monitor (PID %d)...\n", monitor_pid);
+    printf("\n[Treasure Hub] Stopping monitor (PID %d)...\n", monitor_pid);
     kill(monitor_pid, SIGUSR2);
     monitor_shutting_down = 1;
 
@@ -239,6 +256,7 @@ int main() {
             }
 
             start_monitor();
+            usleep(10000);
 
         } else if (strcmp(input, "stop_monitor") == 0) {
 
@@ -257,6 +275,7 @@ int main() {
             }
 
             list_hunts();
+            usleep(10000);
 
         } else if (strncmp(input, "list_treasures ", 15) == 0) {
 
@@ -268,6 +287,7 @@ int main() {
             char game_name[MAX_TXT_SIZE];
             sscanf(input + 15, "%63s", game_name);
             list_treasures(game_name);
+            usleep(10000);
 
         } else if (strncmp(input, "view_treasure ", 14) == 0) {
 
@@ -279,6 +299,7 @@ int main() {
             char game[MAX_TXT_SIZE], treasure[MAX_TXT_SIZE];
             sscanf(input + 14, "%s %s", game, treasure);
             view_treasure(game, treasure);
+            usleep(10000);
 
         } else if (strcmp(input, "calculate_score") == 0) {
 
@@ -288,12 +309,18 @@ int main() {
             }
 
             calculate_score();
+            usleep(10000);
             
         } else if (strcmp(input, "exit") == 0) {
+
+            printf("\n[Treasure Hub] Removing the tmp folder...\n");
+            cleanup_tmp_folder();
+            printf("[Treasure Hub] Bye!\n");
+
             break;
 
         } else {
-            printf("Unknown command: %s", input);
+            printf("\n[Treasure Hub] Unknown command: %s\n", input);
         }
     }
 

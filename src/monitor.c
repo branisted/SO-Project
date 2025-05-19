@@ -12,7 +12,7 @@
 #define CMD_FILE_PATH "tmp/command.txt"
 
 void handle_terminate_signal(int sig) {
-    printf("\n[Monitor] Received termination signal. Exiting...\n");
+    printf("[Monitor] Received termination signal. Exiting...\n");
     fflush(stdout);
     exit(0);
 }
@@ -28,7 +28,7 @@ void handle_command_input(int sig) {
     if (fgets(cmd, MAX_TXT_SIZE, cmd_file)) {
         cmd[strcspn(cmd, "\n")] = '\0';  // remove newline
 
-        printf("[Monitor] Executing command: %s\n", cmd);
+        printf("\n[Monitor] Executing command: %s\n\n", cmd);
         fflush(stdout);
 
         pid_t pid = fork();
@@ -75,7 +75,6 @@ void handle_command_input(int sig) {
             perror("fork failed");
         }
     }
-
     fclose(cmd_file);
 }
 
