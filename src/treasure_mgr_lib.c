@@ -107,7 +107,9 @@ void add(char* hunt_id) {
     close(fd);
 
     char log_msg[512];
-    snprintf(log_msg, sizeof(log_msg), "ADD Treasure ID: %s, User: %s, Value: %d", t.TreasureID, t.Username, t.Value);
+    if (snprintf(log_msg, sizeof(log_msg), "ADD Treasure ID: %s, User: %s, Value: %d", t.TreasureID, t.Username, t.Value) >= sizeof(log_msg)) {
+        fprintf(stderr, "Log message too long in add().");
+    }
     log_operation(hunt_id, log_msg);
 }
 
@@ -199,7 +201,10 @@ void remove_hunt(char* hunt_id) {
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
 
         char file_path[MAX_TXT_SIZE];
-        snprintf(file_path, sizeof(file_path), "%s/%s", hunt_path, entry->d_name);
+        if (snprintf(file_path, sizeof(file_path), "%s/%s", hunt_path, entry->d_name) >= sizeof(file_path)) {
+            fprintf(stderr, "File path too long in remove_hunt().");
+            continue;
+        }
 
         if (unlink(file_path) != 0) {
             perror("Failed to remove a file inside the hunt directory");
@@ -296,7 +301,10 @@ void list_hunts() {
         if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
             continue;
 
-        snprintf(path, sizeof(path), "%s/%s", BASE_DIR, entry->d_name);
+        if (snprintf(path, sizeof(path), "%s/%s", BASE_DIR, entry->d_name) >= sizeof(path)) {
+            fprintf(stderr, "Path too long in list_hunts().");
+            continue;
+        }
 
         if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
             printf(" - %s\n", entry->d_name);

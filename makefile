@@ -26,5 +26,15 @@ tmon: $(TMON_OBJS)
 calc: $(CALC_OBJS)
 	$(CC) $(CFLAGS) -o calculate_score $(CALC_OBJS)
 
+help:
+	@echo "Make options:"
+	@echo "  all          - Build all executables (default)"
+	@echo "  tmgr         - Build treasure_manager only"
+	@echo "  thub         - Build treasure_hub only"
+	@echo "  tmon         - Build monitor only"
+	@echo "  calc         - Build calculate_score only"
+	@echo "  clean        - Remove all built files"
+	@echo "  help         - Show this help message"
+
 clean:
 	rm -f treasure_manager treasure_hub monitor calculate_score

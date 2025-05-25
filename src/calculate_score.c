@@ -12,7 +12,7 @@ typedef struct USERSCORE {
 
     char username[MAX_TXT_SIZE];
     int score;
-    struct USERCORE* next;
+    struct USERSCORE* next;
 
 } USERSCORE_T;
 
