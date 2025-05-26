@@ -73,6 +73,12 @@ void* reader_routine(void *arg) {
 }
 
 int start_monitor() {
+    if (monitor_pid > 0) {
+        printf("\n[Treasure Hub] Monitor is already running.\n");
+        return;
+    }
+
+
     if (pipe(pipe_fds) < 0) {
         perror("pipe"); exit(1);
     }
